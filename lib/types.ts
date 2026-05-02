@@ -22,12 +22,18 @@ export type Database = {
         Row: Guestbook;
         Insert: Omit<Guestbook, 'id' | 'created_at'> & { created_at?: string };
         Update: Partial<Omit<Guestbook, 'id'>>;
+        Relationships: [];
       };
       comments: {
         Row: Comment;
         Insert: Omit<Comment, 'id' | 'created_at'> & { created_at?: string };
         Update: Partial<Omit<Comment, 'id'>>;
+        Relationships: [];
       };
     };
+    Views: Record<string, never>;
+    Functions: Record<string, never>;
+    Enums: Record<string, never>;
+    CompositeTypes: Record<string, never>;
   };
 };

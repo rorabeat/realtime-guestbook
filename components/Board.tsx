@@ -17,7 +17,8 @@ export default function Board() {
   useEffect(() => {
     supabase.from('guestbook').select('*').order('created_at', { ascending: false }).then(({ data }) => setItems(data ?? []));
     const channel = supabase.channel('guestbook-insert').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'guestbook' }, (payload) => {
-      setItems((prev) => [payload.new as Guestbook, ...prev]);
+      const next = payload.new as Guestbook;
+      setItems((prev) => prev.some((item) => item.id === next.id) ? prev : [next, ...prev]);
     }).subscribe();
     return () => { supabase.removeChannel(channel); };
   }, []);
@@ -26,14 +27,19 @@ export default function Board() {
     if (!selected) return;
     supabase.from('comments').select('*').eq('guestbook_id', selected.id).order('created_at').then(({ data }) => setComments(data ?? []));
     const channel = supabase.channel(`comments-${selected.id}`).on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'comments', filter: `guestbook_id=eq.${selected.id}` }, (payload) => {
-      setComments((prev) => [...prev, payload.new as Comment]);
+      const next = payload.new as Comment;
+      setComments((prev) => prev.some((comment) => comment.id === next.id) ? prev : [...prev, next]);
     }).subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [selected]);
 
   const postComment = async () => {
-    if (!selected) return;
-    const { error } = await supabase.from('comments').insert({ guestbook_id: selected.id, author: author || '익명', content });
+    if (!selected || !content.trim()) return;
+    const { error } = await supabase.from('comments').insert({
+      guestbook_id: selected.id,
+      author: author.trim() || '익명',
+      content: content.trim()
+    });
     if (error) setError(`댓글 작성 실패: ${error.message}`);
     else { setAuthor(''); setContent(''); setError(''); }
   };
@@ -49,7 +55,7 @@ export default function Board() {
     {selected && <div className="modalBg" onClick={() => setSelected(null)}><div className="modal" onClick={(e) => e.stopPropagation()}>
       <img src={selected.image_url} alt={selected.content} className="detailImg" />
       <h2>{selected.author}</h2><p>{selected.content}</p>
-      <div className="comments">{comments.map((c) => <div key={c.id}><b>{c.author}</b> {c.content}</div>)}</div>
+      <div className="comments">{comments.map((comment) => <div key={comment.id}><b>{comment.author}</b> {comment.content}</div>)}</div>
       <input value={author} onChange={(e) => setAuthor(e.target.value)} placeholder="이름" />
       <textarea value={content} onChange={(e) => setContent(e.target.value)} placeholder="댓글" />
       <button onClick={postComment}>댓글 등록</button>

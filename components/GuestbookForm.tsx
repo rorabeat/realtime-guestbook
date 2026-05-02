@@ -5,6 +5,15 @@ import { supabase } from '@/lib/supabase';
 
 type Mode = 'upload' | 'drawing';
 
+const getExtension = (name: string, type: string) => {
+  const fromName = name.split('.').pop()?.toLowerCase();
+  if (fromName && /^[a-z0-9]+$/.test(fromName)) return fromName;
+  if (type === 'image/jpeg') return 'jpg';
+  if (type === 'image/webp') return 'webp';
+  if (type === 'image/gif') return 'gif';
+  return 'png';
+};
+
 export default function GuestbookForm() {
   const [mode, setMode] = useState<Mode>('upload');
   const [author, setAuthor] = useState('');
@@ -62,7 +71,11 @@ export default function GuestbookForm() {
   };
 
   const clearAll = () => {
-    setAuthor(''); setContent(''); setError(''); setFile(null); setPreview(null);
+    setAuthor('');
+    setContent('');
+    setError('');
+    setFile(null);
+    setPreview(null);
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
     if (canvas && ctx) {
@@ -75,24 +88,30 @@ export default function GuestbookForm() {
   const submit = async () => {
     if (!author.trim() || !content.trim()) return setError('이름과 메시지를 입력하세요.');
     if (!preview) return setError('이미지를 첨부하거나 그림을 그려주세요.');
-    setLoading(true); setError('');
+    setLoading(true);
+    setError('');
+
     try {
-      const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.png`;
       let blob: Blob;
-      if (mode === 'upload' && file) blob = file;
-      else {
+      if (mode === 'upload' && file) {
+        blob = file;
+      } else {
         const canvas = canvasRef.current;
         if (!canvas) throw new Error('캔버스를 찾을 수 없습니다.');
         blob = await new Promise<Blob>((resolve, reject) =>
           canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('이미지 변환 실패'))), 'image/png')
         );
       }
-      const { error: uploadError } = await supabase.storage.from('guestbook-images').upload(fileName, blob, {
+
+      const extension = mode === 'upload' && file ? getExtension(file.name, file.type) : 'png';
+      const filePath = `uploads/${Date.now()}-${crypto.randomUUID()}.${extension}`;
+      const { error: uploadError } = await supabase.storage.from('guestbook-images').upload(filePath, blob, {
         upsert: false,
-        contentType: 'image/png'
+        contentType: blob.type || 'image/png'
       });
       if (uploadError) throw new Error(`이미지 업로드 실패: ${uploadError.message}`);
-      const { data } = supabase.storage.from('guestbook-images').getPublicUrl(fileName);
+
+      const { data } = supabase.storage.from('guestbook-images').getPublicUrl(filePath);
       const { error: insertError } = await supabase.from('guestbook').insert({
         author: author.trim(),
         content: content.trim(),
@@ -103,7 +122,9 @@ export default function GuestbookForm() {
       clearAll();
     } catch (e) {
       setError(e instanceof Error ? e.message : '오류가 발생했습니다.');
-    } finally { setLoading(false); }
+    } finally {
+      setLoading(false);
+    }
   };
 
   return <main className="container">
